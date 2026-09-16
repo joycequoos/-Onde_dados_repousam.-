@@ -1,78 +1,78 @@
-# Onde os Dados Repousam
+# Where Data Rests
 
-[← Voltar a Tuning SQL Server](https://github.com/joycequoos/SQL_Server_Developer_Tuning_Codigoscom_maximo_desempenho./blob/main/README.md)
+[← Back to SQL Server Tuning](https://github.com/joycequoos/SQL_Server_Developer_Tuning_Codigoscom_maximo_desempenho./blob/main/README.md)
 
-Introdução à página de dados do SQL Server: os conceitos fundamentais de armazenamento (Páginas de Dados e Extents) e de uso de memória pela instância (Buffer Pool, Min/Max Server Memory), essenciais para começar a trabalhar com performance.
+Introduction to the SQL Server data page: the fundamental storage concepts (Data Pages and Extents) and how the instance uses memory (Buffer Pool, Min/Max Server Memory) — essential knowledge before starting to work with performance.
 
-## Índice
+## Table of Contents
 
-- [Páginas de Dados](#páginas-de-dados)
-- [Extent (Extensão)](#extent-extensão)
-- [Memória da Instância do SQL Server](#memória-da-instância-do-sql-server)
-  - [Buffer Pool (ou Buffer Cache)](#buffer-pool-ou-buffer-cache)
-  - [Configurando a Memória no SQL Server](#configurando-a-memória-no-sql-server)
+- [Data Pages](#data-pages)
+- [Extent](#extent)
+- [SQL Server Instance Memory](#sql-server-instance-memory)
+  - [Buffer Pool (or Buffer Cache)](#buffer-pool-or-buffer-cache)
+  - [Configuring Memory in SQL Server](#configuring-memory-in-sql-server)
   - [Min Server Memory](#min-server-memory)
   - [Max Server Memory](#max-server-memory)
-- [Scripts e Referências](#scripts-e-referências)
-- [Próximos Passos](#próximos-passos)
+- [Scripts and References](#scripts-and-references)
+- [Next Steps](#next-steps)
 
 ---
 
-## Páginas de Dados
+## Data Pages
 
-Todos os dados enviados das aplicações e sistemas para um banco de dados são gravados em tabelas, através de instruções `INSERT` e `UPDATE` (para manutenção) ou `DELETE` (para exclusão).
+All data sent from applications and systems to a database is written to tables, through `INSERT` and `UPDATE` statements (for maintenance) or `DELETE` (for deletion).
 
-Internamente, as tabelas possuem outra definição, chamada de **objeto de alocação de dados**. Em cada arquivo de dados existem áreas pré-definidas onde os dados são gravados — essas áreas são associadas aos objetos de alocação e é nelas que os dados são gravados em formato de registro. Essas áreas são conhecidas como **Páginas de Dados**.
+Internally, tables have another definition, called a **data allocation object**. Each data file has predefined areas where data is written — these areas are associated with allocation objects, and it's within them that data is written in record format. These areas are known as **Data Pages**.
 
-| Característica | Descrição |
+| Characteristic | Description |
 | --- | --- |
-| **Unidade fundamental** | A página de dados é a menor alocação utilizada pelo SQL Server, sendo a unidade fundamental de armazenamento |
-| **Tamanho fixo** | Cada página de dados tem exatamente **8 KB (8192 bytes)**, divididos entre cabeçalho, área de dados e slot de controle |
-| **Exclusividade** | Uma página de dados é exclusiva de um único objeto de alocação, mas um objeto de alocação pode ter diversas páginas de dados |
-| **Capacidade útil** | Em cada linha, só é possível armazenar até **8060 bytes** de dados dentro de uma página |
+| **Fundamental unit** | The data page is the smallest allocation unit used by SQL Server, and is the fundamental unit of data storage |
+| **Fixed size** | Each data page has exactly **8 KB (8192 bytes)**, divided between header, data area, and control slot |
+| **Exclusivity** | A data page is exclusive to a single allocation object, but an allocation object can have several data pages |
+| **Usable capacity** | Each row can only store up to **8060 bytes** of data within a page |
 
-Para verificar o espaço ocupado por uma tabela:
+To check the space used by a table:
 
 ```sql
-EXECUTE sp_spaceused 'NomeDaTabela'
+EXECUTE sp_spaceused 'TableName'
 ```
 
-> 👇 **Para saber mais:** documentação oficial de [`sp_spaceused`](https://docs.microsoft.com/pt-br/sql/relational-databases/system-stored-procedures/sp-spaceused-transact-sql).
+> 👇 **To learn more:** official documentation for [`sp_spaceused`](https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-spaceused-transact-sql).
 
-## Extent (Extensão)
+## Extent
 
-Um **Extent** é um agrupamento lógico de páginas de dados, cujo objetivo é gerenciar melhor o espaço alocado. Um Extent tem exatamente **8 páginas de dados**, totalizando **64 KB**.
+An **Extent** is a logical grouping of data pages, whose purpose is to better manage allocated space. An Extent has exactly **8 data pages**, totaling **64 KB**.
 
-Existem dois tipos de Extent:
+There are two types of Extent:
 
-| Tipo | Descrição |
+| Type | Description |
 | --- | --- |
-| **Mixed Extent** (Misto) | As páginas de dados pertencem a objetos de alocação diferentes |
-| **Uniform Extent** (Uniforme) | As páginas de dados pertencem exclusivamente a um único objeto de alocação |
+| **Mixed Extent** | The data pages belong to different allocation objects |
+| **Uniform Extent** | The data pages belong exclusively to a single allocation object |
 
-Uma nova tabela é alocada inicialmente em um Mixed Extent, utilizando uma única página de dados. Se a tabela precisar de uma nova página e o Extent ainda tiver páginas não utilizadas, o SQL Server continua alocando ali mesmo, junto com páginas de outros objetos de alocação. Quando não há mais páginas livres no Mixed Extent, o SQL Server passa a alocar todas as novas páginas em um Uniform Extent.
+A new table is initially allocated in a Mixed Extent, using a single data page. If the table needs a new page and the Extent still has unused pages, SQL Server keeps allocating there, alongside pages from other allocation objects. Once there are no more free pages in the Mixed Extent, SQL Server starts allocating all new pages in a Uniform Extent.
 
-> 👇 **Saiba mais:** [`01 - Página e Extent.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/01 - Página e Extent.sql>)
+> 👇 **Learn more:** [`01 - Page and Extent.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/01 - Página e Extent.sql>)
 
-## Memória da Instância do SQL Server
+## SQL Server Instance Memory
 
-Uma pergunta simples ajuda a entender por que a memória é tão importante: **é mais rápido acessar os dados em memória ou em disco?** A resposta já justifica por que o SQL Server precisa de memória suficiente para atender à carga de dados.
+A simple question helps explain why memory matters so much: **is it faster to access data in memory or on disk?** The answer already justifies why SQL Server needs enough memory to handle the data load.
 
-- **Quanto mais memória, melhor.** Ela é usada para carregar, do disco, os dados que precisam ser acessados, mantendo-os em uma área do SQL Server conhecida como **Buffer Pool**.
-- Servidores com **16 GB, 32 GB ou 64 GB** atendem à maioria das demandas — mas há instalações com mais de **512 GB** de memória.
-- A recomendação mínima da Microsoft é de apenas **1 GB**, mas o recomendado é começar com pelo menos **4 GB**, sempre validando com uma análise real do ambiente para o dimensionamento correto.
+- **The more memory, the better.** It's used to load, from disk, the data that needs to be accessed, keeping it in an area of SQL Server known as the **Buffer Pool**.
+- Servers with **16 GB, 32 GB, or 64 GB** cover most demands — but there are installations with more than **512 GB** of memory.
+- Microsoft's minimum recommendation is just **1 GB**, but the recommended starting point is at least **4 GB**, always validating with a real analysis of the environment for correct sizing.
 
-### Buffer Pool (ou Buffer Cache)
+### Buffer Pool (or Buffer Cache)
 
-Um **buffer** é uma área de **8 KB** na memória, onde o SQL Server armazena as páginas de dados lidas dos objetos de alocação em disco — tarefa de responsabilidade do **Gerenciador de Buffer**.
+A **buffer** is an **8 KB** area in memory where SQL Server stores the data pages read from allocation objects on disk — a task handled by the **Buffer Manager**.
 
-- O dado permanece no buffer até que o Gerenciador de Buffer precise da área para carregar novas páginas. Os buffers mais antigos e com dados modificados são gravados em disco e liberados para novas páginas.
-- Quando o SQL Server precisa de um dado e ele já está no buffer, ocorre uma **leitura lógica**. Se o dado não estiver no buffer, o SQL Server realiza uma **leitura física** do disco para o Buffer Pool.
-- A área de memória do Buffer Pool é controlada por duas configurações da instância: **Min Server Memory** e **Max Server Memory**.
+- The data stays in the buffer until the Buffer Manager needs the area to load new pages. The oldest buffers, and those with modified data, are written to disk and released for new pages.
+- When SQL Server needs a piece of data and it's already in the buffer, a **logical read** occurs. If the data is not in the buffer, SQL Server performs a **physical read** from disk into the Buffer Pool.
+- The memory area of the Buffer Pool is controlled by two instance settings: **Min Server Memory** and **Max Server Memory**.
 
-### Configurando a Memória no SQL Server
+### Configuring Memory in SQL Server
 
-Ao instalar o SQL Server, ele configura automaticamente o uso da memória disponível no servidor, através das opções **Max Server Memory** e **Min Server Memory**. Para consultá-las:
+When you install SQL Server, it automatically configures the use of the server's available memory, through the **Max Server Memory** and **Min Server Memory** options. To check them:
 
 ```sql
 EXECUTE sp_configure 'show advanced options', 1
@@ -83,35 +83,35 @@ EXECUTE sp_configure 'min server memory (MB)'
 EXECUTE sp_configure 'max server memory (MB)'
 ```
 
-Por padrão, o resultado normalmente mostra **1024 KB** de memória mínima e **2147483647 KB** (aproximadamente 2 TB) de memória máxima — o valor máximo teórico suportado, não um valor real de uso.
+By default, the result usually shows **1024 KB** of minimum memory and **2147483647 KB** (approximately 2 TB) of maximum memory — the theoretical maximum supported value, not a real usage figure.
 
 ### Min Server Memory
 
-- **Não** representa a memória mínima que o SQL Server efetivamente utiliza.
-- Ao inicializar, o serviço aloca inicialmente **128 KB** e aguarda as atividades de inclusão, alteração e exclusão de dados pela aplicação. Conforme as consultas são executadas, o SQL Server carrega dados do disco para a memória já reservada.
-- Enquanto a alocação não ultrapassa o valor definido em `Min Server Memory`, essa memória pertence ao SQL Server e **não é devolvida** ao sistema operacional, mesmo que ele solicite.
-- Após ultrapassar esse valor mínimo, o SQL Server continua alocando mais memória normalmente — mas, se o SO precisar dessa memória de volta, o SQL Server pode liberá-la, até o limite mínimo configurado.
+- It does **not** represent the minimum memory that SQL Server actually uses.
+- When the service starts, it initially allocates **128 KB** and waits for insert, update, and delete activity from the application. As queries run, SQL Server loads data from disk into the memory it has already reserved.
+- As long as allocation doesn't exceed the value defined in `Min Server Memory`, that memory belongs to SQL Server and is **not returned** to the operating system, even if requested.
+- Once that minimum value is exceeded, SQL Server continues allocating more memory normally — but if the OS needs that memory back, SQL Server can release it, down to the configured minimum limit.
 
 ### Max Server Memory
 
-- **Não** representa a memória máxima que o SQL Server efetivamente utiliza no dia a dia.
-- O SQL Server continua alocando dados do disco para a memória até atingir o valor definido em `Max Server Memory`. Ao atingir esse limite, se precisar alocar novos dados, ele grava em disco os dados mais antigos, libera a área de memória correspondente e então aloca os novos dados.
-- Se o sistema operacional (ou outras aplicações) precisar de memória e não houver memória livre suficiente, o SO pode solicitá-la ao SQL Server. Caso a memória reservada pelo SQL Server não esteja em uso, ele grava os dados pendentes em disco e libera essa memória para o SO — até o limite definido em `Min Server Memory`.
+- It does **not** represent the maximum memory that SQL Server actually uses on a day-to-day basis.
+- SQL Server keeps allocating data from disk to memory until it reaches the value defined in `Max Server Memory`. Once that limit is reached, if it needs to allocate new data, it writes the oldest data to disk, frees up the corresponding memory area, and then allocates the new data.
+- If the operating system (or other applications) needs memory and there isn't enough free memory available, the OS can request it from SQL Server. If the memory reserved by SQL Server isn't in use, it writes the pending data to disk and releases that memory to the OS — down to the limit defined in `Min Server Memory`.
 
-> 📺 **Referência:** [vídeo sobre o assunto no YouTube](https://www.youtube.com/watch?v=OijdLj4lw5c).
+> 📺 **Reference:** [video on the topic on YouTube](https://www.youtube.com/watch?v=OijdLj4lw5c).
 >
-> 👇 **Saiba mais:** [`02 - Arquitetura da Memória.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/02 - Arquitetura da Memoria.sql>)
+> 👇 **Learn more:** [`02 - Memory Architecture.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/02 - Arquitetura da Memoria.sql>)
 
-## Scripts e Referências
+## Scripts and References
 
-| Script | Conteúdo |
+| Script | Content |
 | --- | --- |
-| [`01 - Página e Extent.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/01 - Página e Extent.sql>) | Exemplos práticos sobre Páginas de Dados e Extents |
-| [`02 - Arquitetura da Memoria.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/02 - Arquitetura da Memoria.sql>) | Exemplos práticos sobre a arquitetura de memória do SQL Server |
+| [`01 - Page and Extent.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/01 - Página e Extent.sql>) | Practical examples on Data Pages and Extents |
+| [`02 - Memory Architecture.sql`](<https://github.com/joycequoos/-Onde_dados_repousam.-/blob/main/02 - Arquitetura da Memoria.sql>) | Practical examples on SQL Server's memory architecture |
 
-## Próximos Passos
+## Next Steps
 
-- Testar `sp_spaceused` em tabelas reais do ambiente e comparar o espaço reservado com o espaço realmente utilizado pelos dados.
-- Explorar a DMV `sys.dm_os_buffer_descriptors` para visualizar, na prática, quais páginas estão atualmente no Buffer Pool.
-- Documentar um caso real de ajuste de `Min Server Memory`/`Max Server Memory` em um ambiente com múltiplas instâncias compartilhando o mesmo servidor.
-- Conectar este conteúdo ao próximo módulo do curso de Tuning, sobre design de banco de dados e estrutura de índices (B-Tree). 
+- Test `sp_spaceused` on real tables in the environment and compare the reserved space with the space actually used by the data.
+- Explore the `sys.dm_os_buffer_descriptors` DMV to see, in practice, which pages are currently in the Buffer Pool.
+- Document a real case of adjusting `Min Server Memory`/`Max Server Memory` in an environment with multiple instances sharing the same server.
+- Connect this content to the next module of the Tuning course, on database design and index structure (B-Tree).
